@@ -1,10 +1,7 @@
 import pandas as pd 
-import pandas as pd
+import datetime
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from pylab import rcParams
-rcParams['figure.figsize'] = 15, 5
+
 
 raw_data =pd.read_json(r"C:\Users\jsru2\Desktop\Winter 21\dataset20210120-202701.json")
 print(raw_data.head(4))
@@ -71,6 +68,12 @@ raw_data['time']=pd.to_timedelta(raw_data['ACT_TIME'], unit='s')
 # print(raw_data.head(4))
 raw_data['tstamp'] = raw_data['date'] + raw_data['time']
 
+#Create service_key
+raw_data['service_key'] = raw_data['date'].dt.dayofweek
+raw_data.loc[raw_data['service_key'].isin(range(0,5)),'service_key']='Weekday'
+raw_data.loc[raw_data['service_key']==5,'service_key']='Saturday'
+raw_data.loc[raw_data['service_key']==6,'service_key']='Sunday'
+
 #create speed column. Convert meter/sec to Miles/Hour multiply by 2.237
 raw_data['speed'] = raw_data['VELOCITY']
 raw_data['speed'] = pd.to_numeric(raw_data['speed'], errors='coerce')
@@ -81,4 +84,9 @@ raw_data['speed']= raw_data['speed']*2.237
 BreadCrumbDF= raw_data[['tstamp','GPS_LATITUDE','GPS_LONGITUDE','DIRECTION','speed','EVENT_NO_TRIP']]
 BreadCrumbDF.columns = ['tstamp','latitude','longitude', 'direction', 'speed','trip_id'  ]
 print(BreadCrumbDF.head(4))
+
+#Create dataframe for Trip table
+TripDF = raw_data[['EVENT_NO_TRIP', 'VEHICLE_ID','service_key']]
+TripDF.columns= ['trip_id','vehicle_id','service_key']
+print(TripDF.head(4))
 
