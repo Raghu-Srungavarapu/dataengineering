@@ -1,10 +1,14 @@
 import pandas as pd 
 import datetime
 import numpy as np
+import psycopg2
+from sqlalchemy import create_engine
 
+#create database engine
+engine = create_engine('postgresql://mm:mmuser@localhost:5432/breadcrumb')
 
+#TODO change the way you read data
 raw_data =pd.read_json(r"C:\Users\jsru2\Desktop\Winter 21\dataset20210120-202701.json")
-print(raw_data.head(4))
 
 #Every record should have a Event-No-trip 
 num_of_null_rows = sum(raw_data['EVENT_NO_TRIP'].isnull().values.ravel())
@@ -68,25 +72,40 @@ raw_data['time']=pd.to_timedelta(raw_data['ACT_TIME'], unit='s')
 # print(raw_data.head(4))
 raw_data['tstamp'] = raw_data['date'] + raw_data['time']
 
+#create speed column. Convert meter/sec to Miles/Hour multiply by 2.237
+raw_data['speed'] = raw_data['VELOCITY']
+raw_data['speed'] = pd.to_numeric(raw_data['speed'], errors='coerce')
+raw_data['speed'].fillna(0, inplace = True)
+raw_data['speed']= raw_data['speed']*2.237
+#print(raw_data.head(4))
+
 #Create service_key
 raw_data['service_key'] = raw_data['date'].dt.dayofweek
 raw_data.loc[raw_data['service_key'].isin(range(0,5)),'service_key']='Weekday'
 raw_data.loc[raw_data['service_key']==5,'service_key']='Saturday'
 raw_data.loc[raw_data['service_key']==6,'service_key']='Sunday'
 
-#create speed column. Convert meter/sec to Miles/Hour multiply by 2.237
-raw_data['speed'] = raw_data['VELOCITY']
-raw_data['speed'] = pd.to_numeric(raw_data['speed'], errors='coerce')
-raw_data['speed'].fillna(0, inplace = True)
-raw_data['speed']= raw_data['speed']*2.237
 
 #Create dataframe for BreadCrumb table
 BreadCrumbDF= raw_data[['tstamp','GPS_LATITUDE','GPS_LONGITUDE','DIRECTION','speed','EVENT_NO_TRIP']]
 BreadCrumbDF.columns = ['tstamp','latitude','longitude', 'direction', 'speed','trip_id'  ]
-print(BreadCrumbDF.head(4))
+#print(BreadCrumbDF.head(4))
+
+#Convert column datatypes to match DB schema
+cols = BreadCrumbDF.columns.drop(['tstamp','speed','trip_id'])
+BreadCrumbDF[cols] = BreadCrumbDF[cols].apply(pd.to_numeric, errors='coerce')
 
 #Create dataframe for Trip table
 TripDF = raw_data[['EVENT_NO_TRIP', 'VEHICLE_ID','service_key']]
 TripDF.columns= ['trip_id','vehicle_id','service_key']
 print(TripDF.head(4))
 
+#Create dataframe for Trip table
+TripDF = raw_data[['EVENT_NO_TRIP', 'VEHICLE_ID','service_key']]
+TripDF.columns= ['trip_id','vehicle_id','service_key']
+#Drop duplicate entries of Trips and keep the fisrt entry
+TripDF=TripDF.drop_duplicates()
+
+#Write data to the tables
+TripDF.to_sql('trip', engine, if_exists='append', index = False)
+BreadCrumbDF.to_sql('breadcrumb', engine, if_exists='append', index = False)
